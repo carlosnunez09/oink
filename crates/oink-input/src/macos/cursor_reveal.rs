@@ -32,6 +32,8 @@ unsafe extern "C" {
 #[derive(Clone, Copy)]
 enum Kind {
     Hid {
+        /// `MouseMoved`, or `LeftMouseDragged` after a native left DOWN.
+        ty: CGEventType,
         dx: i64,
         dy: i64,
         flags: CGEventFlags,
@@ -57,7 +59,7 @@ impl Flight {
         !self.complete
             && !self.cancelled
             && match self.kind {
-                Kind::Hid { .. } => hid && ty == CGEventType::MouseMoved && timestamp >= self.started,
+                Kind::Hid { ty: expected, .. } => hid && ty == expected && timestamp >= self.started,
                 Kind::HidButton { .. } => false,
                 Kind::Cg(expected) => !hid && ty == expected && timestamp == self.started,
             }
@@ -271,7 +273,12 @@ impl Motion {
         let connection = super::capslock::hid::connection()
             .ok_or_else(|| InputError::Platform("IOHIDSystem mouse injection is unavailable".into()))?;
         let field = |f| CGEvent::integer_value_field(Some(event), f);
+        let ty = CGEvent::r#type(Some(event));
+        if !native_motion_type(ty) {
+            return Ok(None);
+        }
         let Some(started) = self.begin(Kind::Hid {
+            ty,
             dx: field(CGEventField::MouseEventDeltaX),
             dy: field(CGEventField::MouseEventDeltaY),
             flags: CGEvent::flags(Some(event)),
@@ -295,9 +302,17 @@ impl Motion {
         // Native typing verified on macOS 14.7.8 / 26.6.2; installed remote
         // typing also on 14.7.8.
         // Relative games retain their CG path.
-        // SAFETY: live connection, initialized SDK v2 union; NX_MOUSEMOVED and
-        // kIOHIDSetCursorPosition only (no global modifier flag changes).
-        let result = unsafe { IOHIDPostEvent(connection, 5, location, &data, 2, 0, 2) };
+        // A left drag that follows a native left DOWN must be native as well.
+        // WindowServer moves a window by its title bar itself (server-side
+        // window drag) and only follows drags from the same HID stream as the
+        // DOWN: the OS rewrites the DOWN's eventNum, so CG drags never match
+        // it. App-side tracking (resize, text selection) accepts either path,
+        // which is why only title-bar moves failed. NX_LMOUSEDRAGGED (6) uses
+        // the same absolute subx/suby layout as NX_MOUSEMOVED (5).
+        // SAFETY: live connection, initialized SDK v2 union; NX_MOUSEMOVED /
+        // NX_LMOUSEDRAGGED and kIOHIDSetCursorPosition only (no global modifier
+        // flag changes).
+        let result = unsafe { IOHIDPostEvent(connection, ty.0, location, &data, 2, 0, 2) };
         if result != 0 {
             self.delivery.lock().unwrap_or_else(|e| e.into_inner()).flight.take();
             return Err(InputError::Platform(format!("IOHIDPostEvent failed: {result:#x}")));
@@ -499,7 +514,7 @@ impl Motion {
         else {
             return Some(false);
         };
-        let Kind::Hid { dx, dy, flags } = f.kind else {
+        let Kind::Hid { dx, dy, flags, .. } = f.kind else {
             return Some(false);
         };
         CGEvent::set_integer_value_field(Some(event), CGEventField::MouseEventDeltaX, dx);
@@ -528,8 +543,12 @@ fn absolute_point(at: CGPoint) -> Option<(IogPoint, NxEventData)> {
     data.0[1] = suby;
     Some((IogPoint { x, y }, data))
 }
+/// Motion types that `post_mouse` submits through IOHIDPostEvent.
+pub(super) fn native_motion_type(ty: CGEventType) -> bool {
+    ty == CGEventType::MouseMoved || ty == CGEventType::LeftMouseDragged
+}
 fn own_mouse(ty: u32, source: i64, pid: i64, own_pid: u32) -> bool {
-    ty == CGEventType::MouseMoved.0
+    native_motion_type(CGEventType(ty))
         && source == i64::from(CGEventSourceStateID::HIDSystemState.0)
         && pid == i64::from(own_pid)
 }
@@ -819,10 +838,34 @@ mod tests {
         }
     }
     #[test]
+    fn native_left_drag_is_acknowledged_only_as_its_own_type() {
+        let f = Flight {
+            started: 100,
+            kind: Kind::Hid {
+                ty: CGEventType::LeftMouseDragged,
+                dx: 1,
+                dy: 0,
+                flags: CGEventFlags(0),
+            },
+            complete: false,
+            cancelled: false,
+        };
+        assert!(f.accepts(true, CGEventType::LeftMouseDragged, 101));
+        assert!(!f.accepts(true, CGEventType::MouseMoved, 101));
+        assert!(!f.accepts(false, CGEventType::LeftMouseDragged, 101));
+        let pid = std::process::id();
+        let hid = i64::from(CGEventSourceStateID::HIDSystemState.0);
+        assert!(own_mouse(CGEventType::MouseMoved.0, hid, i64::from(pid), pid));
+        assert!(own_mouse(CGEventType::LeftMouseDragged.0, hid, i64::from(pid), pid));
+        assert!(!own_mouse(CGEventType::RightMouseDragged.0, hid, i64::from(pid), pid));
+        assert!(!own_mouse(CGEventType::OtherMouseDragged.0, hid, i64::from(pid), pid));
+    }
+    #[test]
     fn late_ack_cannot_take_a_new_posts_delta() {
         let mut f = Flight {
             started: 100,
             kind: Kind::Hid {
+                ty: CGEventType::MouseMoved,
                 dx: 4,
                 dy: 5,
                 flags: CGEventFlags(0),
@@ -830,6 +873,7 @@ mod tests {
             complete: false,
             cancelled: false,
         };
+        assert!(!f.accepts(true, CGEventType::LeftMouseDragged, 101));
         assert!(!f.accepts(true, CGEventType::MouseMoved, 99));
         assert!(!f.accepts(false, CGEventType::MouseMoved, 101));
         assert!(f.accepts(true, CGEventType::MouseMoved, 101));
