@@ -40,6 +40,53 @@ pub mod types;
 mod wire;
 
 pub use events::{ConfigEvent, ConfigPort, LinkConnected, ModuleEvent, ModulePort};
+
+static CABLE_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Connect to other devices only over a direct cable (link-local addresses).
+/// While on, dials skip other addresses, incoming connections from them are
+/// refused and existing connections over them are closed (they then redial
+/// over the cable like after any network drop).
+pub fn set_cable_only(on: bool) {
+    if CABLE_ONLY.swap(on, std::sync::atomic::Ordering::AcqRel) != on {
+        tracing::info!(cable_only = on, "connections restricted to the direct cable");
+    }
+}
+pub(crate) fn cable_only() -> bool {
+    CABLE_ONLY.load(std::sync::atomic::Ordering::Acquire)
+}
+/// A direct-cable (link-local) or loopback address.
+pub fn is_cable_address(address: &SocketAddr) -> bool {
+    match address.ip().to_canonical() {
+        std::net::IpAddr::V4(ip) => ip.is_link_local() || ip.is_loopback(),
+        std::net::IpAddr::V6(ip) => ip.is_unicast_link_local() || ip.is_loopback(),
+    }
+}
+/// Whether this address may be used for a connection under the current policy.
+pub(crate) fn address_allowed(address: &SocketAddr) -> bool {
+    allowed_under(cable_only(), address)
+}
+fn allowed_under(cable_only: bool, address: &SocketAddr) -> bool {
+    !cable_only || is_cable_address(address)
+}
+#[cfg(test)]
+mod cable_only_tests {
+    use super::*;
+    #[test]
+    fn cable_only_allows_link_local_and_loopback_but_never_wifi() {
+        let cable: SocketAddr = "169.254.3.4:47470".parse().unwrap();
+        let mapped: SocketAddr = "[::ffff:169.254.3.4]:47470".parse().unwrap();
+        let v6_cable: SocketAddr = "[fe80::1]:47470".parse().unwrap();
+        let loopback: SocketAddr = "127.0.0.1:47470".parse().unwrap();
+        let wifi: SocketAddr = "192.168.1.20:47470".parse().unwrap();
+        for address in [cable, mapped, v6_cable, loopback] {
+            assert!(allowed_under(true, &address), "{address}");
+        }
+        assert!(!allowed_under(true, &wifi));
+        assert!(allowed_under(false, &wifi));
+    }
+}
+
 pub use low::{InboundLow, LowError, LowStream};
 pub use snapshot::{LinkEntry, LinkTable, SchedulerStatus, StreamCounters};
 pub use stream::{DatagramError, DatagramRecv, DatagramSend, InboundStream, RecvStream, SendStream, Wake};

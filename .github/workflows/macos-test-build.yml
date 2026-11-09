@@ -109,3 +109,4 @@ jobs:
         run: |
           cargo test --locked -p oink-agent --lib --target ${{ matrix.target }} -- \
             direct_cable direct_first_puts_cable battery_slows_checks
+          cargo test --locked -p oink-network --lib --target ${{ matrix.target }} -- cable_only

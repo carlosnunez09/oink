@@ -77,6 +77,7 @@ impl Node {
     pub(super) fn start_direct_cable(&self) {
         let node = self.clone();
         let mut stop = self.stop_receiver();
+        oink_network::link::set_cable_only(node.settings().direct_cable_pause);
         let task = tokio::spawn(async move {
             loop {
                 // Every second on AC power, every three seconds on battery.
@@ -87,6 +88,8 @@ impl Node {
                 }
                 let addresses = direct_addresses();
                 let enabled = node.settings().direct_cable_pause;
+                // The same setting keeps every connection on the cable (never Wi-Fi).
+                oink_network::link::set_cable_only(enabled);
                 let paused = node.pause_status().paused;
                 let action = {
                     let mut monitor = lock(&node.inner.direct_cable);

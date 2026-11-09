@@ -1991,6 +1991,16 @@ impl Network {
                 progress = true;
             }
         }
+        if super::cable_only() {
+            for physical in self.physical.values() {
+                let remote = physical.connection.remote_address();
+                if physical.connection.close_reason().is_none() && !super::is_cable_address(&remote) {
+                    tracing::info!(%remote, "cable only: closing a connection that is not on the direct cable");
+                    physical.connection.close(0u32.into(), b"cable only");
+                    progress = true;
+                }
+            }
+        }
         if let Poll::Ready(Some(incoming)) = self.accepting.poll(cx, || {
             let endpoint = self.endpoint.clone();
             Box::pin(async move { endpoint.accept().await })
@@ -2001,7 +2011,7 @@ impl Network {
                     .values()
                     .filter(|p| !p.outbound && p.id.is_none_or(|id| !self.core.selected_connection_id(id)))
                     .count();
-            if pending >= MAX_INBOUND_PENDING {
+            if pending >= MAX_INBOUND_PENDING || !super::address_allowed(&incoming.remote_address()) {
                 incoming.refuse();
             } else if let Ok(connecting) = incoming.accept() {
                 self.inbound.push(Handshake {
@@ -2158,6 +2168,10 @@ impl Network {
                     let Some(address) = dial.addresses.pop_front() else {
                         break;
                     };
+                    if !super::address_allowed(&address) {
+                        progress = true;
+                        continue;
+                    }
                     let id = ConnectionId {
                         initiator_boot: self.core.boot,
                         random: rand::random(),
