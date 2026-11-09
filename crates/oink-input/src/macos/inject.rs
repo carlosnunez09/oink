@@ -814,8 +814,16 @@ impl Injector {
         let before = current_location();
         let epoch = self.motion.position_epoch();
         let predecessor = st.pending_position.take().map_or(before, |p| p.resolve(before, epoch));
+        // A left drag stays native only when its DOWN was native (a nonzero
+        // native number) and it is ordinary routed motion, not a held
+        // cross-device drag source, whose positioning relies on CG.
+        let native_motion = ty == CGEventType::MouseMoved
+            || (ty == CGEventType::LeftMouseDragged
+                && posted.is_none()
+                && st.held_source.is_none()
+                && st.native_numbers[0] != 0);
         if !relative
-            && ty == CGEventType::MouseMoved
+            && native_motion
             && let Some(receipt) = self.motion.post_mouse(&ev, p)?
         {
             st.last_move_native = true;
