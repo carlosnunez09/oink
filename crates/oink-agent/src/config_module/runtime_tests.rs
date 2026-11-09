@@ -2662,3 +2662,13 @@ async fn unhide_repairs_only_restored_device_in_one_layout_publication() {
     }
     stop(&nodes).await;
 }
+
+#[test]
+fn direct_first_puts_cable_addresses_before_wifi_and_dedups() {
+    let wifi: SocketAddr = "192.168.1.20:47470".parse().unwrap();
+    let cable: SocketAddr = "169.254.10.2:47470".parse().unwrap();
+    let ordered = super::direct_first([wifi, cable, wifi]);
+    assert_eq!(ordered, vec![cable, wifi]);
+    assert!(super::is_direct_link(&cable));
+    assert!(!super::is_direct_link(&wifi));
+}

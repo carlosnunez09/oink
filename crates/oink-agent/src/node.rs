@@ -5,6 +5,7 @@ mod assembly;
 mod card_projection;
 mod main_commands;
 mod notifications;
+mod direct_cable;
 mod observers;
 mod power;
 #[cfg(all(test, debug_assertions))]
@@ -195,6 +196,7 @@ pub(crate) struct Inner {
     last_overview: Mutex<Option<api::Overview>>,
     last_audio: Mutex<Option<oink_audio::Status>>,
     last_pause: Mutex<Option<api::PauseStatus>>,
+    direct_cable: Mutex<direct_cable::Monitor>,
     last_diagnostics: Mutex<Option<api::DiagnosticRecorderStatus>>,
     last_launch: Mutex<Option<api::LaunchAtLoginStatus>>,
     last_permissions: Mutex<Option<Vec<api::PermissionItem>>>,
@@ -445,6 +447,7 @@ impl Node {
                 last_overview: Mutex::new(None),
                 last_audio: Mutex::new(None),
                 last_pause: Mutex::new(None),
+                direct_cable: Mutex::default(),
                 last_diagnostics: Mutex::new(None),
                 last_launch: Mutex::new(None),
                 last_permissions: Mutex::new(None),

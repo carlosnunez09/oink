@@ -126,6 +126,8 @@ export interface GroupView { id: GroupKey | null; members: Member[] }
 
 export type InterfaceKind = "ethernet" | "wifi" | "vpn" | "other";
 export interface LocalAddress { ip: string; interface: string; kind: InterfaceKind }
+/** Direct Ethernet cable between computers (link-local 169.254/16 address). */
+export interface DirectCableStatus { enabled: boolean; connected: boolean; paused_by_cable: boolean; addresses: string[] }
 export interface NetworkInfo { addresses: LocalAddress[]; port: number; low_port?: number | null }
 
 export interface DisplayInfo {

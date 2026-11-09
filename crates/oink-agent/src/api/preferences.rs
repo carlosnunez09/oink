@@ -13,6 +13,8 @@ pub struct UiPreferences {
     pub show_status_icon: bool,
     pub confirm_quit: bool,
     pub paste_as_file: bool,
+    #[serde(default)]
+    pub direct_cable_pause: bool,
     pub log_level: LogLevel,
     pub log_max_mb: LogMaxMb,
 }
@@ -26,6 +28,7 @@ impl From<&crate::config::Settings> for UiPreferences {
             show_status_icon: settings.show_status_icon,
             confirm_quit: settings.confirm_quit,
             paste_as_file: settings.paste_as_file,
+            direct_cable_pause: settings.direct_cable_pause,
             log_level: settings.log_level,
             log_max_mb: settings.log_max_mb,
         }
@@ -40,6 +43,7 @@ impl UiPreferences {
         settings.show_status_icon = self.show_status_icon;
         settings.confirm_quit = self.confirm_quit;
         settings.paste_as_file = self.paste_as_file;
+        settings.direct_cable_pause = self.direct_cable_pause;
         settings.log_level = self.log_level;
         settings.log_max_mb = self.log_max_mb;
     }

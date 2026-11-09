@@ -563,6 +563,19 @@ pub struct LocalAddress {
     pub kind: InterfaceKind,
 }
 
+/// Direct Ethernet cable between computers (link-local 169.254/16 address).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct DirectCableStatus {
+    /// The "pause sharing while unplugged" setting.
+    pub enabled: bool,
+    /// A direct-cable address is present on this computer.
+    pub connected: bool,
+    /// Sharing is currently paused because the cable is unplugged.
+    pub paused_by_cable: bool,
+    /// This computer's direct-cable addresses.
+    pub addresses: Vec<String>,
+}
+
 /// 「本机信息」：本机的所有 IP 与监听端口。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NetworkInfo {
@@ -1972,6 +1985,7 @@ pub trait AgentApi: Send + Sync {
     fn leave_group(&self) -> ApiResult<()>;
 
     fn network_info(&self) -> ApiResult<NetworkInfo>;
+    fn direct_cable_status(&self) -> ApiResult<DirectCableStatus>;
 
     // Shared layout geometry.
     fn layout(&self) -> ApiResult<Layout>;
@@ -2343,6 +2357,7 @@ pub enum Request {
     },
     LeaveGroup,
     NetworkInfo,
+    DirectCableStatus,
     Layout,
     ResetInitialLayout,
     SaveLayout {
@@ -2492,6 +2507,7 @@ pub enum Reply {
     Pause(PauseStatus),
     Group(GroupView),
     NetworkInfo(NetworkInfo),
+    DirectCable(DirectCableStatus),
     Layout(Layout),
     InputSettings(InputSettings),
     CacheUsage(Vec<CacheDevice>),
@@ -2674,6 +2690,7 @@ pub fn dispatch<A: AgentApi + ?Sized>(api: &A, req: Request) -> ApiResult<Reply>
         R::RemoveMember { device } => unit(api.remove_member(device)),
         R::LeaveGroup => unit(api.leave_group()),
         R::NetworkInfo => api.network_info().map(Reply::NetworkInfo),
+        R::DirectCableStatus => api.direct_cable_status().map(Reply::DirectCable),
         R::ResetInitialLayout => api.reset_initial_layout().map(Reply::Layout),
         R::Layout => api.layout().map(Reply::Layout),
         R::SaveLayout { placements } => api.save_layout(placements).map(Reply::Layout),

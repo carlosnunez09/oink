@@ -37,6 +37,7 @@ export interface Prefs {
     showInMenuBar: boolean;
     confirmQuit: boolean;
     pasteAsFile: boolean;
+    directCablePause: boolean;
     notificationLevel: import("../api/cards").UiPreferences["notification_level"];
     escStop: boolean;
     language: string;
@@ -75,6 +76,7 @@ export const DEFAULT_PREFS: Prefs = {
     showInMenuBar: true,
     confirmQuit: true,
     pasteAsFile: true,
+    directCablePause: false,
     notificationLevel: 'default',
     escStop: true,
     language: 'auto',

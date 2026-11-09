@@ -714,6 +714,9 @@ impl AgentApi for RemoteApi {
     fn network_info(&self) -> ApiResult<NetworkInfo> {
         self.call(Request::NetworkInfo)
     }
+    fn direct_cable_status(&self) -> ApiResult<crate::api::DirectCableStatus> {
+        self.call(Request::DirectCableStatus)
+    }
 
     fn reset_initial_layout(&self) -> ApiResult<Layout> {
         self.call(Request::ResetInitialLayout)

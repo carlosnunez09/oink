@@ -56,6 +56,7 @@ export const api = {
   removeMember: (device: T.DeviceKey) => call<null>("remove_member", { device }),
   leaveGroup: () => call<null>("leave_group"),
   networkInfo: () => call<T.NetworkInfo>("network_info"),
+  directCableStatus: () => call<T.DirectCableStatus>("direct_cable_status"),
 
   previewLayoutProjection: (gesture: number, placements: T.Placement[], affected: T.ScreenKey[], ended: boolean, arrangement?: import('./layoutProfiles').ArrangementSnapshot) =>
     call<null>('preview_layout_projection', { gesture, placements, affected, ended, arrangement }),

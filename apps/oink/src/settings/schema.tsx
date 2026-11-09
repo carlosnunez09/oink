@@ -3,7 +3,7 @@ import { Icon } from 'oink-ui';
 import type { ReactNode } from 'react';
 import type { Platform } from '../window/DesktopWindow';
 import { SHORTCUTS } from './Shortcuts';
-export type SectionId = 'general' | 'appearance' | 'layout' | 'input' | 'clipboard' | 'audio' | 'shortcuts' | 'tools' | 'permissions' | 'diagnostics';
+export type SectionId = 'general' | 'appearance' | 'layout' | 'input' | 'clipboard' | 'audio' | 'shortcuts' | 'tools' | 'direct' | 'permissions' | 'diagnostics';
 type Text = string | ((p: Platform) => string);
 export interface ItemMeta {
     id: string;
@@ -232,6 +232,19 @@ export const SECTIONS: SectionMeta[] = [
         id: 'tools', get title() { return tr('工具'); }, icon: <Icon name="settings"/>,
         items: [{ id: 'pasteAsFile', get label() { return tr('在右键菜单添加“粘贴为文件”'); },
             desc: p => p === 'mac' ? tr('复制图片、文本时，可在 Finder 中粘贴为文件') : tr('复制图片、文本时，可在资源管理器中粘贴为文件') }],
+    },
+    {
+        id: 'direct', get title() { return tr('直接连接'); },
+        icon: <Icon>
+            <path d="M7 2.8v3.6M13 2.8v3.6M5.2 6.4h9.6v3.2a4.8 4.8 0 0 1-9.6 0zM10 14.4v2.8"/>
+          </Icon>,
+        items: [
+            { id: 'directCablePause', get label() { return tr('网线拔出时暂停共享'); },
+                get desc() { return tr('用网线直连两台电脑时，拔出网线自动暂停共享，插回后自动恢复'); },
+                get keywords() { return tr('网线 以太网 直连 有线 暂停'); } },
+            { id: 'directCableStatus', get label() { return tr('网线状态'); }, parent: 'directCablePause',
+                get keywords() { return tr('网线 以太网 直连 有线 暂停'); } },
+        ],
     },
     {
         id: 'permissions',

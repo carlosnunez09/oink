@@ -265,6 +265,7 @@ export interface UiPreferences {
   show_status_icon: boolean;
   confirm_quit: boolean;
   paste_as_file: boolean;
+  direct_cable_pause?: boolean; // absent from older backends: off
   log_level: "error" | "warn" | "info" | "debug" | "trace";
   log_max_mb: number; // positive u32, decimal megabytes
 }

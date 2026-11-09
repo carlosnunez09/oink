@@ -20,6 +20,7 @@ import { PermissionRow } from '../permissions/PermissionRow';
 import { PermissionControl } from '../permissions/PermissionControl';
 import { useGrant } from './useGrant';
 import { UninstallControl } from './UninstallControl';
+import { DirectCableIndicator } from './DirectCable';
 import { AutoUnlockControl } from './AutoUnlock';
 import { UpdateCheck, UpdatePreferences, manualUpdates } from './UpdatePreferences';
 import { SHORTCUTS, deviceShortcuts, ShortcutRecorder, spokenKeys } from './Shortcuts';
@@ -315,6 +316,8 @@ export function SettingsPage({ open, platform, api, capsIme, query, jump, onActi
                     : autoUnlock?.failure ? autoUnlockFailureText(autoUnlock.failure) : undefined,
                 node: <AutoUnlockControl platform={platform} enabled={autoUnlock?.enabled ?? false} failure={autoUnlock?.failure ?? null} windowsHelloOnly={platform === 'win' && (autoUnlock?.windows_hello_only ?? false)} label={label} onSave={saveAutoUnlock} onDisable={disableAutoUnlock}/>,
             };
+            case 'directCablePause': return sw('directCablePause');
+            case 'directCableStatus': return { node: <DirectCableIndicator/> };
             case 'onboarding': return { node: <Button size="sm" onClick={onOnboarding}>{tr('显示')}</Button> };
             case 'uninstall': return { node: <UninstallControl/> };
             case 'blocklist':

@@ -1,7 +1,8 @@
-name: macOS test build (unsigned)
-# Builds the Mac program files for a branch without the upstream signing
-# certificate, after running the macOS input tests. The result is a set of
-# unsigned binaries for local testing; it is not an installable, notarized app.
+name: Test build (unsigned)
+# Builds the Mac (Apple Silicon) and Windows program files for a branch without
+# the upstream signing certificates, then runs the backend tests that cover
+# input, discovery and Direct connection. The results are unsigned binaries for
+# local testing; they are not installable, signed or notarized packages.
 on:
   push:
     branches: ['claude/**']
@@ -13,7 +14,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: macos-test-build-${{ github.ref }}
+  group: test-build-${{ github.ref }}
   cancel-in-progress: true
 env:
   CARGO_TERM_COLOR: always
@@ -28,14 +29,16 @@ jobs:
         include:
           - os: macos-15
             target: aarch64-apple-darwin
-            arch: arm64
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            arch: x64
+            name: macos-arm64
+            jobs: '3'
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            name: windows-x64
+            jobs: '4'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
-      CARGO_BUILD_JOBS: '2'
+      CARGO_BUILD_JOBS: ${{ matrix.jobs }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -66,25 +69,43 @@ jobs:
         run: |
           npm install --global npm@11.11.0
           if ! cargo about --version 2>/dev/null | grep -q '0.9.2$'; then cargo install cargo-about --version 0.9.2 --locked --features cli; fi
-      - name: macOS input tests
-        run: cargo test --locked -p oink-input --target ${{ matrix.target }}
       - name: Build unsigned product binaries
         shell: bash
         run: |
           tree=$(python -c "import sys; sys.path.insert(0, 'build-support'); from provenance import source_tree_sha256; print(source_tree_sha256())")
+          args=()
+          if [[ "$RUNNER_OS" == macOS ]]; then args+=(--sparkle-cache "$RUNNER_TEMP/package-tools"); fi
           python build-support/build.py --target ${{ matrix.target }} --build 108 \
-            --source-tree-sha256 "$tree" --sparkle-cache "$RUNNER_TEMP/package-tools"
+            --source-tree-sha256 "$tree" "${args[@]}"
       - name: Collect binaries
         shell: bash
         run: |
-          out="$RUNNER_TEMP/oink-macos-${{ matrix.arch }}"
+          out="$RUNNER_TEMP/oink-${{ matrix.name }}"
           mkdir -p "$out"
           rel=target/${{ matrix.target }}/release
-          cp "$rel"/oink "$rel"/oink-agent "$rel"/oink-backend "$rel"/release-build.json "$out"/
-          cp "$rel"/oink-crash* "$out"/ 2>/dev/null || true
-          (cd "$out" && shasum -a 256 oink* > SHA256SUMS)
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            cp "$rel"/oink "$rel"/oink-agent "$rel"/oink-backend "$rel"/oink-crash-collector "$out"/
+          else
+            cp "$rel"/*.exe "$out"/
+            cp "$rel"/OinkCredentialProvider.dll "$out"/ 2>/dev/null || true
+          fi
+          cp "$rel"/release-build.json "$out"/
+          python - "$out" <<'PY'
+          import hashlib, pathlib, sys
+          out = pathlib.Path(sys.argv[1])
+          lines = [f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}" for p in sorted(out.iterdir()) if p.name != 'SHA256SUMS']
+          (out / 'SHA256SUMS').write_text('\n'.join(lines) + '\n')
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: oink-macos-${{ matrix.arch }}-unsigned
-          path: ${{ runner.temp }}/oink-macos-${{ matrix.arch }}
+          name: oink-${{ matrix.name }}-unsigned
+          path: ${{ runner.temp }}/oink-${{ matrix.name }}
           retention-days: 14
+      - name: Input tests (macOS)
+        if: runner.os == 'macOS'
+        run: cargo test --locked -p oink-input --target ${{ matrix.target }}
+      - name: Direct connection and discovery tests
+        shell: bash
+        run: |
+          cargo test --locked -p oink-agent --lib --target ${{ matrix.target }} -- \
+            direct_cable direct_first_puts_cable

@@ -1203,6 +1203,10 @@ impl AgentApi for Node {
         })
     }
 
+    fn direct_cable_status(&self) -> ApiResult<crate::api::DirectCableStatus> {
+        Ok(self.direct_cable_status())
+    }
+
     fn reset_initial_layout(&self) -> ApiResult<Layout> {
         let node = self.clone();
         block(self, async move { Node::reset_initial_layout(&node).await })

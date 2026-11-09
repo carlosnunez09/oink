@@ -281,6 +281,7 @@ impl Node {
         lock(&self.inner.tasks).extend(tasks);
         self.start_main_commands(receive)?;
         self.start_observers()?;
+        self.start_direct_cable();
         recovery_guard.0 = None;
         *lock(&self.inner.group_unreadable) = None;
         self.emit_group();

@@ -122,6 +122,26 @@ enum Incoming {
 struct Seen {
     sighting: Sighting,
     at: Instant,
+    /// Every address heard from this device recently, with when it was last heard.
+    addr_seen: Vec<(SocketAddr, Instant)>,
+}
+/// How long an address heard in one announcement stays a connection candidate.
+/// A device announces itself on every network it is on (for example Wi-Fi and a
+/// direct cable), one address per beacon; keeping recent ones stops the
+/// candidates from flipping between networks on every beacon.
+const RECENT_ADDRESS: Duration = Duration::from_secs(10);
+/// How often local network addresses are re-read (a plugged-in cable is noticed
+/// and announced within this interval).
+const NETWORK_CHECK: Duration = Duration::from_secs(1);
+/// Direct-cable (link-local 169.254/16) addresses first, then a stable order.
+fn direct_first(addresses: impl IntoIterator<Item = SocketAddr>) -> Vec<SocketAddr> {
+    let mut addresses: Vec<SocketAddr> = addresses.into_iter().collect();
+    addresses.sort_by_key(|address| (!is_direct_link(address), *address));
+    addresses.dedup();
+    addresses
+}
+pub(crate) fn is_direct_link(address: &SocketAddr) -> bool {
+    matches!(address.ip(), std::net::IpAddr::V4(ip) if ip.is_link_local())
 }
 struct Query {
     client: [u8; 16],
@@ -535,7 +555,7 @@ impl Owner {
             local,
             facts: BTreeMap::new(),
             last_facts: Instant::now(),
-            network_checked: Instant::now() - Duration::from_secs(2),
+            network_checked: Instant::now() - NETWORK_CHECK,
             #[cfg(test)]
             hold_facts: false,
             #[cfg(test)]
@@ -681,7 +701,7 @@ impl Owner {
                 deadline = deadline.min(at);
             }
         }
-        deadline = deadline.min(self.network_checked + Duration::from_secs(2));
+        deadline = deadline.min(self.network_checked + NETWORK_CHECK);
         // Only work that tick can perform may wake the actor. A disconnected
         // peer can retain its retry deadline through sleep or inbound reconnect.
         if !self.sleeping {
@@ -1699,7 +1719,7 @@ impl Owner {
             tracing::debug!(?error, "pointer shortcut allocation deferred");
         }
         let now = Instant::now();
-        if now >= self.network_checked + Duration::from_secs(2) {
+        if now >= self.network_checked + NETWORK_CHECK {
             self.network_checked = now;
             match self.observe_endpoint_facts() {
                 Ok(true) => {
@@ -1883,9 +1903,11 @@ impl Owner {
         }
         let mut seen = BTreeSet::new();
         addresses.retain(|address| seen.insert(*address));
+        // A direct cable is the fastest path; offer it before Wi-Fi/LAN.
+        addresses.sort_by_key(|address| !is_direct_link(address));
         addresses
     }
-    fn sighting(&mut self, sighting: Sighting) {
+    fn sighting(&mut self, mut sighting: Sighting) {
         let peer = sighting.advert.id;
         if peer == self.identity.id() {
             return;
@@ -1893,6 +1915,24 @@ impl Owner {
         if self.nearby.len() >= 4096 && !self.nearby.contains_key(&peer) {
             return;
         }
+        let now = Instant::now();
+        // Keep addresses recently heard on other networks for the same advert.
+        let mut addr_seen: Vec<(SocketAddr, Instant)> = self
+            .nearby
+            .get(&peer)
+            .filter(|seen| seen.sighting.advert == sighting.advert)
+            .map(|seen| {
+                seen.addr_seen
+                    .iter()
+                    .copied()
+                    .filter(|(address, at)| {
+                        now.saturating_duration_since(*at) < RECENT_ADDRESS && !sighting.addrs.contains(address)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        addr_seen.extend(sighting.addrs.iter().map(|address| (*address, now)));
+        sighting.addrs = direct_first(addr_seen.iter().map(|(address, _)| *address));
         let changed = self
             .nearby
             .get(&peer)
@@ -1901,7 +1941,8 @@ impl Owner {
             peer,
             Seen {
                 sighting,
-                at: Instant::now(),
+                at: now,
+                addr_seen,
             },
         );
         if self.state.roster().contains(peer) {
@@ -1920,7 +1961,7 @@ impl Owner {
     }
     pub(super) fn wake(&mut self) {
         self.sleeping = false;
-        self.network_checked = Instant::now() - Duration::from_secs(2);
+        self.network_checked = Instant::now() - NETWORK_CHECK;
         for dial in self.dials.values_mut() {
             dial.reset(Instant::now());
         }

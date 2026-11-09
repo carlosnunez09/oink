@@ -63,6 +63,8 @@ pub struct Settings {
     pub show_status_icon: bool,
     pub confirm_quit: bool,
     pub paste_as_file: bool,
+    /// Pause sharing while the direct Ethernet cable to the other computer is unplugged.
+    pub direct_cable_pause: bool,
     pub emergency_hold_ms: EmergencyHoldMs,
     #[serde(skip)]
     pub clipboard_enabled: bool,
@@ -111,6 +113,7 @@ impl Default for Settings {
             show_status_icon: true,
             confirm_quit: true,
             paste_as_file: true,
+            direct_cable_pause: false,
             emergency_hold_ms: EmergencyHoldMs::default(),
             clipboard_enabled: true,
             screen_shared: true,
