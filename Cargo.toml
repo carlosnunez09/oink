@@ -16,6 +16,7 @@ members = [
     "crates/oink-crash",
     "crates/oink-audio",
     "crates/oink-autostart",
+    "crates/oink-remote",
     "apps/oink/src-tauri",
     "tests/support",
 ]

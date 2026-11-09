@@ -77,6 +77,14 @@ jobs:
           if [[ "$RUNNER_OS" == macOS ]]; then args+=(--sparkle-cache "$RUNNER_TEMP/package-tools"); fi
           python build-support/build.py --target ${{ matrix.target }} --build 108 \
             --source-tree-sha256 "$tree" "${args[@]}"
+      # Oink Remote (screen sharing over Tailscale) is a separate program that
+      # the product build does not include. Built after it: the product build
+      # first cleans every workspace package.
+      - name: Build and test Oink Remote
+        shell: bash
+        run: |
+          cargo build --release --locked -p oink-remote --target ${{ matrix.target }}
+          cargo test --locked -p oink-remote --target ${{ matrix.target }}
       - name: Collect binaries
         shell: bash
         run: |
@@ -84,7 +92,7 @@ jobs:
           mkdir -p "$out"
           rel=target/${{ matrix.target }}/release
           if [[ "$RUNNER_OS" == macOS ]]; then
-            cp "$rel"/oink "$rel"/oink-agent "$rel"/oink-backend "$rel"/oink-crash-collector "$out"/
+            cp "$rel"/oink "$rel"/oink-agent "$rel"/oink-backend "$rel"/oink-crash-collector "$rel"/oink-remote "$out"/
           else
             cp "$rel"/*.exe "$out"/
             cp "$rel"/OinkCredentialProvider.dll "$out"/ 2>/dev/null || true

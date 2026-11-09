@@ -12340,6 +12340,8 @@
         "runtime"
       ],
       "platforms": [
+        "macos-arm64",
+        "macos-x64",
         "windows-x64"
       ],
       "copyright": [

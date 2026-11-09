@@ -3427,6 +3427,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "oink-remote"
+version = "0.3.4"
+dependencies = [
+ "blake3",
+ "clap",
+ "getrandom 0.3.4",
+ "image",
+ "softbuffer",
+ "tao",
+ "windows",
+ "zune-core 0.5.3",
+ "zune-jpeg 0.5.15",
+]
+
+[[package]]
 name = "oink-routing"
 version = "0.3.4"
 dependencies = [

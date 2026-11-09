@@ -78,12 +78,36 @@ Windows, IOKit on macOS, cached 30 s, unknown counts as AC).
 pushes to `claude/**` that touch `crates/**`, `apps/oink/**` or the workflow.
 It builds Apple Silicon macOS and Windows x64 with `build-support/build.py`,
 uploads `oink-macos-arm64-unsigned` and `oink-windows-x64-unsigned`, and runs
-the macOS input tests plus the new tests. It produces program files, not
+the macOS input tests plus the new tests. It also builds and tests
+`oink-remote` and adds it to both artifacts. It produces program files, not
 signed installers. Each run takes about 20 min (Mac) and 40 min (Windows).
 
 Latest passing run with everything above: **42676921592**.
 
+### 6. Oink Remote (remote desktop over Tailscale)
+Goal: when the Mac is away from the PC (no cable, not the same LAN), see and
+control the Windows PC from the Mac. Oink has no screen view, so this is a new
+crate, `crates/oink-remote`, with its own connection (TCP, default port 47489)
+that is separate from Oink's device network. Tailscale provides reachability
+and encryption; Oink Remote adds an access key. See
+`crates/oink-remote/README.md` for use, design and limits.
+
+- It is a separate program, `oink-remote` (`host` on Windows, `connect` on
+  the Mac). The test-build workflow builds it and puts it in both artifacts.
+- Not done yet: starting it from the Oink app (a setting on the PC, a
+  "Connect remotely" button on the Mac), connecting automatically when the
+  cable or LAN is gone, the lock screen (needs the `OinkInput` service),
+  clipboard and sound, hosting on macOS.
+- Dependencies were kept to crates already in `Cargo.lock`. `jpeg-encoder`
+  would be faster but its IJG licence is not on the allowed list in
+  `deny.toml`; the `image` crate's encoder is used instead.
+
 ## Verification status
+
+- Oink Remote: unit tests and a whole-session test (fake screen and input over
+  a local connection) pass on Linux; the Windows and macOS code type-checks
+  and passes clippy for those targets from Linux. Not yet run on the real
+  computers: Windows capture and input, the Mac viewer window.
 
 - Compiled on GitHub macOS and Windows runners; the new unit tests pass there.
 - The app type check and the i18n and settings-persistence tests pass.
@@ -125,6 +149,20 @@ Start-Service OinkInput; Start-Process "C:\Program Files\Oink\oink.exe"
 ```
 Undo: stop as above, then
 `Copy-Item "$env:USERPROFILE\Oink-backup\*" "C:\Program Files\Oink\" -Recurse -Force; Start-Service OinkInput`
+
+### Oink Remote
+The program is in the same artifacts (`oink-remote.exe`, `oink-remote`). It
+does not need to be copied into the Oink installation.
+
+Windows (PowerShell, in the download folder; allow it through the firewall
+when Windows asks):
+```powershell
+cd $env:USERPROFILE\Downloads\oink-new; Unblock-File .\oink-remote.exe; .\oink-remote.exe host
+```
+Mac (Terminal; use the address the PC printed):
+```bash
+cd ~/Downloads/oink-macos-arm64-unsigned && chmod +x oink-remote && xattr -d com.apple.quarantine oink-remote 2>/dev/null; ./oink-remote connect 100.x.y.z
+```
 
 ## Useful settings and facts
 
