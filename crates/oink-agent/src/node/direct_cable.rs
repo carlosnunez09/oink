@@ -10,9 +10,6 @@ use super::*;
 use crate::api::{AgentApi, DirectCableStatus};
 use std::net::Ipv4Addr;
 
-/// How often the network adapters are checked for the cable.
-const POLL: Duration = Duration::from_secs(1);
-
 #[derive(Debug, Default)]
 pub(crate) struct Monitor {
     /// Cable presence at the previous check.
@@ -81,12 +78,12 @@ impl Node {
         let node = self.clone();
         let mut stop = self.stop_receiver();
         let task = tokio::spawn(async move {
-            let mut tick = tokio::time::interval(POLL);
-            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
+                // Every second on AC power, every three seconds on battery.
+                let wait = crate::power_source::check_interval();
                 tokio::select! {
                     _ = stop.changed() => break,
-                    _ = tick.tick() => {}
+                    _ = tokio::time::sleep(wait) => {}
                 }
                 let addresses = direct_addresses();
                 let enabled = node.settings().direct_cable_pause;

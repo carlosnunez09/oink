@@ -15,6 +15,7 @@ mod cache;
 pub mod clip;
 pub mod config;
 pub mod config_module;
+mod power_source;
 mod connection_quality;
 pub mod device_cards;
 pub mod device_controls;

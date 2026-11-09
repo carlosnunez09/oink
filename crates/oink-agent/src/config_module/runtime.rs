@@ -131,8 +131,11 @@ struct Seen {
 /// candidates from flipping between networks on every beacon.
 const RECENT_ADDRESS: Duration = Duration::from_secs(10);
 /// How often local network addresses are re-read (a plugged-in cable is noticed
-/// and announced within this interval).
-const NETWORK_CHECK: Duration = Duration::from_secs(1);
+/// and announced within this interval): every second on AC power, every three
+/// seconds on battery.
+fn network_check() -> Duration {
+    crate::power_source::check_interval()
+}
 /// Direct-cable (link-local 169.254/16) addresses first, then a stable order.
 fn direct_first(addresses: impl IntoIterator<Item = SocketAddr>) -> Vec<SocketAddr> {
     let mut addresses: Vec<SocketAddr> = addresses.into_iter().collect();
@@ -555,7 +558,7 @@ impl Owner {
             local,
             facts: BTreeMap::new(),
             last_facts: Instant::now(),
-            network_checked: Instant::now() - NETWORK_CHECK,
+            network_checked: Instant::now() - network_check(),
             #[cfg(test)]
             hold_facts: false,
             #[cfg(test)]
@@ -701,7 +704,7 @@ impl Owner {
                 deadline = deadline.min(at);
             }
         }
-        deadline = deadline.min(self.network_checked + NETWORK_CHECK);
+        deadline = deadline.min(self.network_checked + network_check());
         // Only work that tick can perform may wake the actor. A disconnected
         // peer can retain its retry deadline through sleep or inbound reconnect.
         if !self.sleeping {
@@ -1719,7 +1722,7 @@ impl Owner {
             tracing::debug!(?error, "pointer shortcut allocation deferred");
         }
         let now = Instant::now();
-        if now >= self.network_checked + NETWORK_CHECK {
+        if now >= self.network_checked + network_check() {
             self.network_checked = now;
             match self.observe_endpoint_facts() {
                 Ok(true) => {
@@ -1961,7 +1964,7 @@ impl Owner {
     }
     pub(super) fn wake(&mut self) {
         self.sleeping = false;
-        self.network_checked = Instant::now() - NETWORK_CHECK;
+        self.network_checked = Instant::now() - network_check();
         for dial in self.dials.values_mut() {
             dial.reset(Instant::now());
         }
