@@ -1,0 +1,81 @@
+name: macOS test build (unsigned)
+# Builds the Mac program files for a branch without the upstream signing
+# certificate, after running the macOS input tests. The result is a set of
+# unsigned binaries for local testing; it is not an installable, notarized app.
+on:
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'crates/**'
+      - 'apps/oink/**'
+      - '.github/workflows/macos-test-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-test-build-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUTF8: '1'
+  MACOSX_DEPLOYMENT_TARGET: '14.2'
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            arch: arm64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: '1.99.0'
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: test-build-${{ matrix.target }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.6'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24.14.1'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Pin npm
+        run: npm install --global npm@11.11.0
+      - name: macOS input tests
+        run: cargo test --locked -p oink-input --target ${{ matrix.target }}
+      - name: Build unsigned product binaries
+        shell: bash
+        run: |
+          tree=$(python -c "import sys; sys.path.insert(0, 'build-support'); from provenance import source_tree_sha256; print(source_tree_sha256())")
+          python build-support/build.py --target ${{ matrix.target }} --build 108 \
+            --source-tree-sha256 "$tree" --sparkle-cache "$RUNNER_TEMP/package-tools"
+      - name: Collect binaries
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/oink-macos-${{ matrix.arch }}"
+          mkdir -p "$out"
+          rel=target/${{ matrix.target }}/release
+          cp "$rel"/oink "$rel"/oink-agent "$rel"/oink-backend "$rel"/release-build.json "$out"/
+          cp "$rel"/oink-crash* "$out"/ 2>/dev/null || true
+          (cd "$out" && shasum -a 256 oink* > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: oink-macos-${{ matrix.arch }}-unsigned
+          path: ${{ runner.temp }}/oink-macos-${{ matrix.arch }}
+          retention-days: 14
